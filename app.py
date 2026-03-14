@@ -1,8 +1,8 @@
 # app.py
 import streamlit as st
-from utils.ocr import extract_text_from_image
-from utils.preprocessing import preprocess_image
-from utils.ner import extract_entities_from_text, match_entities_across_documents
+from ocr import extract_text_from_image
+from preprocessing import preprocess_image
+from ner import extract_entities_from_text, match_entities_across_documents
 import os
 import time
 
