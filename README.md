@@ -1,133 +1,86 @@
-# Automated Data Verification
+# Smart Verification
 
-Automated Data Verification is a Streamlit-based project for checking whether user-entered personal information matches uploaded identity and academic documents.
+Smart Verification is a Streamlit app that compares applicant-entered details with DigiLocker documents and uploaded original-source documents. It extracts text from images, text-based PDFs, and scanned PDFs, then checks whether key fields appear consistently across the selected files.
 
-The app extracts text from uploaded files using OCR, preprocesses images for better recognition, and compares important fields like:
-- name
-- date of birth
-- father's name
-- mother's name
+## What It Does
 
-## Features
+- collects applicant name, date of birth, and parent names
+- supports DigiLocker document options such as Aadhaar, PAN, voter ID, passport, and marksheets
+- preprocesses images before OCR for better text quality
+- extracts text from images with Tesseract
+- extracts text from text-based PDFs with PyPDF2
+- falls back to OCR for scanned PDFs
+- supports DigiLocker OAuth-based fetching when partner credentials are configured
+- uses fuzzy matching to verify fields across uploaded documents
+- flags whether the selected ID document contains a recognizable document-number pattern
 
-- Streamlit user interface
-- OCR-based text extraction using Tesseract
-- document image preprocessing
-- fuzzy matching across multiple uploaded documents
-- support for identity documents and marksheets
-- Render-ready Docker deployment
+## Stack
 
-## Tech Stack
-
-- Python
+- Python 3.12
 - Streamlit
 - Tesseract OCR
 - Pillow
-- OpenCV
-- spaCy
-- fuzzywuzzy
 - PyPDF2
+- pypdfium2
+- fuzzywuzzy + python-Levenshtein
 
-## Project Structure
-
-```text
-.
-├── app.py
-├── validation.py
-├── ocr.py
-├── preprocessing.py
-├── ner.py
-├── requirements.txt
-├── Dockerfile
-├── .dockerignore
-├── .streamlit/
-│   └── config.toml
-└── uploads/
-```
-
-## Local Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Reeshav12/Automated-Data-Verrification.git
-cd Automated-Data-Verrification
-```
-
-### 2. Create a virtual environment
+## Local Run
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
 pip install -r requirements.txt
+streamlit run app.py
 ```
 
-### 4. Install Tesseract OCR
-
-On Ubuntu/Debian:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y tesseract-ocr
-```
-
-On macOS:
+Install Tesseract locally if it is not already available:
 
 ```bash
 brew install tesseract
 ```
 
-### 5. Run the app
+For Hindi OCR support:
 
 ```bash
-streamlit run app.py
+brew install tesseract-lang
 ```
 
-## Deploy on Render
+## Render Deployment
 
-This repository is configured to run as a Docker-based Render Web Service.
+This project is ready to deploy on Render as a Docker-based web service.
 
-### Render settings
+### Recommended Render settings
 
 - Service Type: `Web Service`
 - Runtime: `Docker`
 - Branch: `main`
 - Root Directory: leave blank
 
-You do not need a separate build or start command because Render will use the included Dockerfile.
+Render will use the included `Dockerfile`, install Tesseract with Hindi language data, and start Streamlit on the Render-provided port.
 
-## How Deployment Works
+### DigiLocker configuration
 
-The Docker container:
-- installs Python dependencies
-- installs Tesseract OCR
-- starts Streamlit on Render's assigned port
+For live DigiLocker fetching, configure these environment variables in Render:
 
-Start command inside Docker:
+- `DIGILOCKER_CLIENT_ID`
+- `DIGILOCKER_CLIENT_SECRET`
+- `DIGILOCKER_REDIRECT_URI`
+
+Optional endpoint overrides:
+
+- `DIGILOCKER_AUTHORIZE_URL`
+- `DIGILOCKER_TOKEN_URL`
+- `DIGILOCKER_ISSUED_DOCS_URL`
+- `DIGILOCKER_FILE_URL`
+
+### Start command used inside the container
 
 ```bash
 streamlit run app.py --server.port ${PORT} --server.address 0.0.0.0 --server.headless true
 ```
 
-## Current Limitations
+## Notes
 
-- OCR quality depends on scan clarity
-- some document types may need stronger parsing rules
-- Tesseract must be available for image OCR
-
-## Future Improvements
-
-- better UI design
-- database integration
-- user authentication
-- downloadable verification report
-- more document templates and stronger validation rules
-
-## License
-
-This project includes the license in [LICENSE](LICENSE).
+- Image uploads work best when the document is cropped clearly and has good contrast.
+- PDF uploads support both text-based PDFs and scanned PDFs.
+- Uploaded files and extracted text are stored under `uploads/` for traceability.

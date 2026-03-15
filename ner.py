@@ -1,89 +1,162 @@
-import spacy
 import re
+
 from fuzzywuzzy import fuzz
 
-# Load the English NLP model
-nlp = spacy.load("en_core_web_sm")
 
-def extract_entities_from_text(text):
-    """
-    Extracts names and DOB from text with fallback patterns.
-    """
-    doc = nlp(text)
-    entities = {"PERSON": [], "DATE": []}
+FIELD_PATTERNS = {
+    "Name": [
+        r"(?:\bname\b|\bcandidate name\b|\bstudent name\b|\bapplicant name\b)\s*[:\-]?\s*([A-Za-z][A-Za-z\s.]{1,80})",
+    ],
+    "Father's Name": [
+        r"(?:\bfather'?s name\b|\bfather name\b|\bfather\b)\s*[:\-]?\s*([A-Za-z][A-Za-z\s.]{1,80})",
+    ],
+    "Mother's Name": [
+        r"(?:\bmother'?s name\b|\bmother name\b|\bmother\b)\s*[:\-]?\s*([A-Za-z][A-Za-z\s.]{1,80})",
+    ],
+    "DOB": [
+        r"(?:\bdob\b|\bdate of birth\b|\bbirth date\b)\s*[:\-]?\s*([0-9]{1,4}[\/.\-][0-9]{1,2}[\/.\-][0-9]{1,4})",
+        r"\b([0-9]{1,2}[\/.\-][0-9]{1,2}[\/.\-][0-9]{4})\b",
+    ],
+}
 
-    # Extract names using NLP (PERSON)
-    for ent in doc.ents:
-        if ent.label_ == "PERSON":
-            entities["PERSON"].append(ent.text.strip())
-    
-    # Custom Regex for Father's Name and Mother's Name
-    custom_patterns = [
-        (r"(Father['s]* Name|Father):?\s*([^\n]+)", "PERSON"),
-        (r"(Mother['s]* Name|Mother):?\s*([^\n]+)", "PERSON"),
-    ]
-    for pattern, entity_type in custom_patterns:
-        matches = re.findall(pattern, text)
-        for _, value in matches:
-            entities[entity_type].append(value.strip())
 
-    # Custom DOB extraction
-    dob_patterns = [
-        r"(DOB|Date of Birth|जन्‍म लियि)[\s:]*([\d]{2}/[\d]{2}/[\d]{4})",
-        r"[\d]{2}/[\d]{2}/[\d]{4}",  # Handle loose DOB patterns
-    ]
+IGNORE_NAME_TERMS = {
+    "GOVERNMENT",
+    "INDIA",
+    "UNIVERSITY",
+    "SECONDARY",
+    "CERTIFICATE",
+    "MARKSHEET",
+    "MARK SHEET",
+    "BOARD",
+    "ENROLMENT",
+    "ENROLLMENT",
+    "ROLL",
+    "NUMBER",
+    "DOB",
+    "DATE OF BIRTH",
+    "FATHER",
+    "MOTHER",
+}
 
-    for pattern in dob_patterns:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            if isinstance(match, tuple):
-                entities["DATE"].append(match[1])
-            else:
-                entities["DATE"].append(match)
 
-    return entities
+def clean_whitespace(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip())
 
-def normalize_date(date_str):
-    """
-    Normalize DOB from various formats (DD/MM/YYYY or YYYY-MM-DD) to uniform DD-MM-YYYY.
-    """
-    try:
-        parts = re.split(r"[-/]", date_str)
-        if len(parts) == 3:
-            day, month, year = parts if len(parts[0]) == 2 else parts[::-1]
-            return f"{day.zfill(2)}-{month.zfill(2)}-{year}"
-    except ValueError:
-        return date_str  # Fallback without crash
-    return date_str
 
-def preprocess_candidate(candidate):
-    """
-    Preprocess the candidate name to remove unwanted characters and format it.
-    """
-    candidate = candidate.strip().lower()  # Normalize case and strip whitespace
-    candidate = re.sub(r'[^a-zA-Z\s]', '', candidate)  # Remove non-alphabetic characters
-    return candidate
+def dedupe(values: list[str]) -> list[str]:
+    seen = set()
+    ordered = []
+    for value in values:
+        normalized = clean_whitespace(value)
+        if normalized and normalized.lower() not in seen:
+            seen.add(normalized.lower())
+            ordered.append(normalized)
+    return ordered
 
-def match_entities_across_documents(entity_type, target_value, extracted_texts, threshold=75):
-    """
-    Fuzzy match for specific field (Name, DOB).
-    """
+
+def normalize_date(date_str: str) -> str:
+    raw_value = clean_whitespace(str(date_str))
+    if not raw_value:
+        return ""
+
+    match = re.search(r"([0-9]{1,4})[\/.\-]([0-9]{1,2})[\/.\-]([0-9]{1,4})", raw_value)
+    if not match:
+        return raw_value.lower()
+
+    first, second, third = match.groups()
+    if len(first) == 4:
+        year, month, day = first, second, third
+    else:
+        day, month, year = first, second, third
+
+    if len(year) == 2:
+        year = f"20{year}" if int(year) <= 30 else f"19{year}"
+
+    return f"{day.zfill(2)}-{month.zfill(2)}-{year.zfill(4)}"
+
+
+def preprocess_candidate(candidate: str) -> str:
+    normalized = clean_whitespace(candidate).lower()
+    normalized = re.sub(r"[^a-z0-9\s]", "", normalized)
+    return clean_whitespace(normalized)
+
+
+def likely_name_lines(text: str) -> list[str]:
+    candidates = []
+    for line in text.splitlines():
+        compact = clean_whitespace(line)
+        if len(compact) < 5 or any(char.isdigit() for char in compact):
+            continue
+
+        upper_value = compact.upper()
+        if any(term in upper_value for term in IGNORE_NAME_TERMS):
+            continue
+
+        words = re.findall(r"[A-Za-z]+", compact)
+        if 1 < len(words) <= 5:
+            candidates.append(" ".join(words))
+
+    return dedupe(candidates[:10])
+
+
+def extract_candidates_for_field(field: str, text: str) -> list[str]:
+    values = []
+    for pattern in FIELD_PATTERNS.get(field, []):
+        for match in re.findall(pattern, text, flags=re.IGNORECASE):
+            values.append(match if isinstance(match, str) else match[-1])
+
+    if field == "Name":
+        values.extend(likely_name_lines(text))
+
+    return dedupe(values)
+
+
+def extract_entities_from_text(text: str) -> dict[str, list[str]]:
+    names = []
+    for field in ("Name", "Father's Name", "Mother's Name"):
+        names.extend(extract_candidates_for_field(field, text))
+
+    dates = extract_candidates_for_field("DOB", text)
+    return {"PERSON": dedupe(names), "DATE": dedupe(dates)}
+
+
+def similarity_score(left: str, right: str) -> int:
+    return max(
+        fuzz.ratio(left, right),
+        fuzz.partial_ratio(left, right),
+        fuzz.token_set_ratio(left, right),
+    )
+
+
+def match_entities_across_documents(
+    entity_type: str,
+    target_value: str,
+    extracted_texts: list[str],
+    threshold: int = 85,
+) -> int:
+    if entity_type == "DOB":
+        normalized_target = normalize_date(target_value)
+    else:
+        normalized_target = preprocess_candidate(target_value)
+
+    if not normalized_target:
+        return 0
+
     match_count = 0
-    target_value = normalize_date(target_value) if entity_type == "DOB" else target_value
-
     for text in extracted_texts:
-        entities = extract_entities_from_text(text)
-        candidates = entities.get("PERSON" if entity_type in ["Name", "Father's Name", "Mother's Name"] else "DATE", [])
-
+        candidates = extract_candidates_for_field(entity_type, text)
         for candidate in candidates:
-            candidate = normalize_date(candidate) if entity_type == "DOB" else preprocess_candidate(candidate)
+            normalized_candidate = (
+                normalize_date(candidate)
+                if entity_type == "DOB"
+                else preprocess_candidate(candidate)
+            )
 
-            # Debugging: Log the comparison
-            similarity_score = fuzz.ratio(target_value.lower(), candidate.lower())
-            if similarity_score < threshold:
-                print(f"Mismatch: '{target_value}' (target) vs '{candidate}' (candidate) - Similarity: {similarity_score}")
+            if not normalized_candidate:
+                continue
 
-            if similarity_score >= threshold:
+            if similarity_score(normalized_target, normalized_candidate) >= threshold:
                 match_count += 1
                 break
 

@@ -1,9 +1,8 @@
-streamlit
-Pillow
-pytesseract
-opencv-python
-spacy
-fuzzywuzzy
-python-Levenshtein
-pandas
-PyPDF2
+streamlit>=1.32,<2
+Pillow>=10,<12
+pytesseract>=0.3.10,<0.4
+fuzzywuzzy>=0.18,<1
+python-Levenshtein>=0.25,<1
+PyPDF2>=3,<4
+pypdfium2>=4.30,<5
+requests>=2.31,<3

@@ -1,32 +1,19 @@
-from PIL import Image
-import cv2
-import numpy as np
+from pathlib import Path
 
-def preprocess_image(image_path, processed_dir):
-    """
-    Preprocess the uploaded image (resize, convert to grayscale, etc.)
+from PIL import Image, ImageOps
 
-    Parameters:
-        image_path (str): Path to the uploaded image.
-        processed_dir (str): Directory where the processed image will be saved.
-        
-    Returns:
-        str: Path to the preprocessed image.
-    """
-    try:
-        # Load the image
-        img = Image.open(image_path)
-        
-        
-        img = img.resize((800, 800))
-        
-        # Convert image to grayscale for better OCR accuracy
-        img_gray = img.convert('L')
-        
-        # Save preprocessed image
-        processed_path = f"{processed_dir}/{image_path.split('/')[-1]}"
-        img_gray.save(processed_path)
-        
-        return processed_path
-    except Exception as e:
-        return f"Error in image preprocessing: {e}"
+
+def preprocess_image(image_path: str | Path, processed_dir: str | Path) -> Path:
+    source_path = Path(image_path)
+    destination_dir = Path(processed_dir)
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
+    with Image.open(source_path) as image:
+        image = ImageOps.exif_transpose(image)
+        image.thumbnail((1600, 1600))
+        grayscale = ImageOps.autocontrast(image.convert("L"))
+
+        processed_path = destination_dir / f"{source_path.stem}_processed.png"
+        grayscale.save(processed_path, format="PNG")
+
+    return processed_path

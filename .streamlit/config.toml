@@ -2,3 +2,11 @@
 headless = true
 enableCORS = false
 enableXsrfProtection = false
+
+[theme]
+base = "light"
+primaryColor = "#1d4ed8"
+backgroundColor = "#f4f8fc"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#10233f"
+font = "sans serif"
