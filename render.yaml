@@ -1,6 +1,0 @@
-services:
-  - type: web
-    name: smart-verification
-    runtime: docker
-    plan: free
-    autoDeploy: true
